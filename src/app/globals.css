@@ -124,7 +124,7 @@
   body {
     @apply bg-background text-foreground;
   }
-  html {
-    @apply font-sans;
-  }
+}
+.p-2 {
+    border-radius: 20px;
 }

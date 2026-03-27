@@ -46,24 +46,24 @@ export default function ChatWindow({ chatId }: { chatId: string }) {
             <div className="flex-1 overflow-y-auto space-y-4">
                 {messages.map((m, i) => (
                     <div key={i}>
-                        <b>{m.role}:</b> {m.content}
+                        {m.content}
                     </div>
                 ))}
             </div>
 
             <div className="flex gap-2 mt-4">
                 <input
+                    placeholder="Спросить ChatGPT"
                     className="border p-2 flex-1"
                     value={input}
+                    onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                            sendMessage(); // вызываем функцию отправки
+                            setInput('');   // очищаем инпут после отправки
+                        }
+                    }}
                     onChange={(e) => setInput(e.target.value)}
                 />
-
-                <button
-                    onClick={sendMessage}
-                    className="bg-black text-white px-4 py-2"
-                >
-                    Send
-                </button>
             </div>
 
             {loading && <p>Thinking...</p>}
