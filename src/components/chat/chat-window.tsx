@@ -42,47 +42,35 @@ export default function ChatWindow({ chatId }: { chatId: string }) {
         setLoading(true);
         let imageUrl: string | null = null;
 
-        // Загрузка картинки
         if (file) {
             const formData = new FormData();
             formData.append("file", file);
             formData.append("chatId", chatId);
-
             const res = await fetch("/api/upload", { method: "POST", body: formData });
-
-            if (!res.ok) {
-                console.error("Upload failed:", await res.text());
-                setLoading(false);
-                return;
-            }
-
             const data = await res.json();
             imageUrl = data.url;
         }
 
-        // Добавляем сообщение пользователя в UI
-        const userMessage = { role: "user", content: input, image: imageUrl };
-        setMessages(prev => [...prev, userMessage]);
-
+        // Добавляем сообщение в UI
+        setMessages(prev => [...prev, { role: "user", content: input, image: imageUrl }]);
         setInput("");
         setPreview(null);
         setFile(null);
 
-        // Отправка текста на сервер
         try {
             const res = await fetch("/api/messages", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ chatId, message: input, image: imageUrl }),
+                body: JSON.stringify({
+                    chatId,
+                    message: input,
+                    image: imageUrl,
+                    userId: user?.id || null // ✅ передаём userId
+                }),
             });
 
             const data = await res.json();
             setMessages(prev => [...prev, { role: "assistant", content: data.message }]);
-
-            if (!user) {
-                incrementFreeQuestions();
-                setFreeLeft(prev => prev - 1);
-            }
         } catch (e) {
             console.error(e);
         }

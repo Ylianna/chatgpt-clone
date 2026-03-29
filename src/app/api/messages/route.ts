@@ -18,11 +18,17 @@ export async function POST(req: Request) {
             .single()
 
         if (!existingChat) {
-            const { error: chatError } = await supabaseServer
-                .from("chats")
-                .insert({ id: chatId })
-            if (chatError) {
-                return NextResponse.json({ error: chatError.message }, { status: 500 })
+            if (!body.userId) {
+                // Анонимный пользователь: создаём чат только с UUID (можно не сохранять в БД)
+                await supabaseServer.from("chats").insert({ id: chatId });
+            } else {
+                // Залогиненный пользователь
+                const { error: chatError } = await supabaseServer
+                    .from("chats")
+                    .insert({ id: chatId, user_id: body.userId })
+                if (chatError) {
+                    return NextResponse.json({ error: chatError.message }, { status: 500 })
+                }
             }
         }
 
