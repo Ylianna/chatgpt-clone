@@ -128,3 +128,31 @@
 .p-2 {
     border-radius: 20px;
 }
+.h-screen {
+    height: 80vh
+}
+/* globals.css */
+@layer utilities {
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 5px; /* Ширина скролла */
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: #d1d5db; /* Цвет scroll-thumb (gray-300) */
+    border-radius: 10px;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: #9ca3af; /* Цвет при наведении (gray-400) */
+  }
+
+  /* Для Firefox */
+  .custom-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: #d1d5db transparent;
+  }
+}
