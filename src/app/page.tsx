@@ -9,6 +9,24 @@ export default function Page() {
     const [chatId, setChatId] = useState<string | null>(null)
     const [chats, setChats] = useState<any[]>([])
     const user = useUser()
+    const [messages, setMessages] = useState<any[]>([])
+
+    useEffect(() => {
+        if (!chatId) return
+
+        const fetchMessages = async () => {
+            try {
+                const res = await fetch(`/api/messages?chatId=${chatId}`)
+                const data = await res.json()
+                console.log("Messages for chat:", chatId, data)
+                setMessages(data)
+            } catch (err) {
+                console.error(err)
+            }
+        }
+
+        fetchMessages()
+    }, [chatId])
 
     // Загружаем чаты только после того как user доступен
     useEffect(() => {
@@ -56,7 +74,7 @@ export default function Page() {
                     onClick={createNewChat}
                     className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 mb-4"
                 >
-                    Новый чат
+                    New chat
                 </button>
 
                 <div className="flex-1 overflow-y-auto space-y-2">
@@ -76,7 +94,7 @@ export default function Page() {
 
             {/* Основная область чата */}
             <div className="flex-1">
-                {chatId && <ChatWindow key={chatId} chatId={chatId} />}
+                {chatId && <ChatWindow key={chatId} chatId={chatId} initialMessages={messages} />}
             </div>
         </div>
     )

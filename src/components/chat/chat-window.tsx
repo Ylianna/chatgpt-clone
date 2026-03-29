@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useUser } from "@/hooks/use-user";
 
-export default function ChatWindow({ chatId }: { chatId: string }) {
+export default function ChatWindow({ chatId, initialMessages = [] }: { chatId: string, initialMessages?: any[] }) {
     const [messages, setMessages] = useState<any[]>([]);
     const [input, setInput] = useState("");
     const [loading, setLoading] = useState(false);
@@ -17,6 +17,10 @@ export default function ChatWindow({ chatId }: { chatId: string }) {
         if (typeof window === "undefined") return 0;
         return Number(localStorage.getItem("free_questions") || "0");
     }
+
+    useEffect(() => {
+        setMessages(initialMessages);
+    }, [initialMessages]);
 
     useEffect(() => {
         const count = getFreeQuestions();
