@@ -2,11 +2,15 @@
 
 import { useState } from "react"
 import { useUser } from "@/hooks/use-user"
+import { useEffect } from "react"
 
 export default function ChatWindow({ chatId }: { chatId: string }) {
     const [messages, setMessages] = useState<any[]>([])
     const [input, setInput] = useState("")
     const [loading, setLoading] = useState(false)
+    const [preview, setPreview] = useState<string | null>(null)
+    const [file, setFile] = useState<File | null>(null)
+    const [freeLeft, setFreeLeft] = useState(3)
 
     const user = useUser()
 
@@ -16,32 +20,67 @@ export default function ChatWindow({ chatId }: { chatId: string }) {
         return Number(localStorage.getItem("free_questions") || "0")
     }
 
+    useEffect(() => {
+        const count = Number(localStorage.getItem("free_questions") || "0")
+        setFreeLeft(3 - count)
+    }, [])
+
     // увеличиваем счетчик
     const incrementFreeQuestions = () => {
         const count = getFreeQuestions() + 1
         localStorage.setItem("free_questions", count.toString())
     }
 
+    const handleFileUpload = (e: any) => {
+        const selectedFile = e.target.files[0]
+        if (!selectedFile) return
+
+        setFile(selectedFile)
+        setPreview(URL.createObjectURL(selectedFile))
+    }
+
     const sendMessage = async () => {
-        if (!input || loading) return
+        if ((!input && !file) || loading) return
+
+        const messageText = input
 
         const freeQuestions = getFreeQuestions()
 
-        // проверяем лимит
         if (!user && freeQuestions >= 3) {
             alert("You reached the free limit. Please login.")
             window.location.href = "/login"
             return
         }
 
+        setLoading(true)
+
+        let imageUrl = null
+
+        if (file) {
+            const formData = new FormData()
+            formData.append("file", file)
+            formData.append("chatId", chatId)
+
+            const res = await fetch("/api/upload", {
+                method: "POST",
+                body: formData,
+            })
+
+            const data = await res.json()
+            imageUrl = data.url
+        }
+
         const userMessage = {
             role: "user",
-            content: input,
+            content: messageText,
+            image: imageUrl,
         }
 
         setMessages((prev) => [...prev, userMessage])
+
         setInput("")
-        setLoading(true)
+        setPreview(null)
+        setFile(null)
 
         try {
             const res = await fetch("/api/messages", {
@@ -51,7 +90,7 @@ export default function ChatWindow({ chatId }: { chatId: string }) {
                 },
                 body: JSON.stringify({
                     chatId,
-                    message: userMessage.content,
+                    message: messageText,
                 }),
             })
 
@@ -62,13 +101,13 @@ export default function ChatWindow({ chatId }: { chatId: string }) {
                 { role: "assistant", content: data.message },
             ])
 
-            // увеличиваем счетчик если пользователь анонимный
             if (!user) {
                 incrementFreeQuestions()
+                setFreeLeft((prev) => prev - 1)
             }
 
-        } catch (error) {
-            console.error(error)
+        } catch (e) {
+            console.error(e)
         }
 
         setLoading(false)
@@ -88,8 +127,17 @@ export default function ChatWindow({ chatId }: { chatId: string }) {
                                 : "text-left text-gray-700"
                         }
                     >
-                        <div className="inline-block bg-gray-100 p-3 rounded-lg">
-                            {m.content}
+                        <div className="inline-block bg-gray-100 p-3 rounded-lg max-w-xs">
+
+                            {m.image && (
+                                <img
+                                    src={m.image}
+                                    className="w-full rounded mb-2"
+                                />
+                            )}
+
+                            {m.content && <p>{m.content}</p>}
+
                         </div>
                     </div>
                 ))}
@@ -98,15 +146,41 @@ export default function ChatWindow({ chatId }: { chatId: string }) {
             {/* лимит сообщений */}
             {!user && (
                 <p className="text-sm text-gray-500 mb-2">
-                    Free questions left: {3 - getFreeQuestions()}
+                    Free questions left: {freeLeft}
                 </p>
             )}
 
             {/* input */}
-            <div className="flex gap-2">
+            {preview && (
+                <div className="mb-2 flex items-center gap-2">
+                    <img src={preview} className="w-16 h-16 object-cover rounded" />
+
+                    <button
+                        onClick={() => {
+                            setPreview(null)
+                            setFile(null)
+                        }}
+                        className="text-red-500 text-sm"
+                    >
+                        ✕
+                    </button>
+                </div>
+            )}
+            <div className="flex items-center gap-2 border rounded-lg px-2">
+                <label className="cursor-pointer text-xl px-2">
+                    +
+                    <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleFileUpload}
+                        className="hidden"
+                    />
+                </label>
+
+                {/* текстовый input */}
                 <input
                     placeholder="Ask something..."
-                    className="border rounded-lg p-2 flex-1"
+                    className="flex-1 p-2 outline-none"
                     value={input}
                     disabled={loading}
                     onKeyDown={(e) => {
@@ -116,14 +190,6 @@ export default function ChatWindow({ chatId }: { chatId: string }) {
                     }}
                     onChange={(e) => setInput(e.target.value)}
                 />
-
-                <button
-                    onClick={sendMessage}
-                    disabled={loading}
-                    className="bg-black text-white px-4 rounded-lg"
-                >
-                    Send
-                </button>
             </div>
 
             {loading && (
