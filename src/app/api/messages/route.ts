@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server"
 import { supabaseServer } from "@/lib/supabase-server"
 
-// ✅ GET — получить сообщения
 export async function GET(req: Request) {
     try {
         const { searchParams } = new URL(req.url)
@@ -37,8 +36,6 @@ export async function GET(req: Request) {
     }
 }
 
-
-// ✅ POST — отправка сообщения + OpenRouter
 export async function POST(req: Request) {
     try {
         const body = await req.json()
@@ -51,14 +48,27 @@ export async function POST(req: Request) {
             )
         }
 
-        // 1. сохраняем user сообщение
         await supabaseServer.from("messages").insert({
             chat_id: chatId,
             role: "user",
             content: message,
         })
+        const { count } = await supabaseServer
+            .from("messages")
+            .select("*", { count: "exact", head: true })
+            .eq("chat_id", chatId)
 
-        // 2. история чата
+        if (count === 1) {
+            const newTitle =
+                message.length > 40
+                    ? message.slice(0, 40) + "..."
+                    : message
+
+            await supabaseServer
+                .from("chats")
+                .update({ title: newTitle })
+                .eq("id", chatId)
+        }
         const { data: messages } = await supabaseServer
             .from("messages")
             .select("role, content")
@@ -71,7 +81,6 @@ export async function POST(req: Request) {
                 content: m.content,
             })) || []
 
-        // 3. запрос к OpenRouter
         const response = await fetch(
             "https://openrouter.ai/api/v1/chat/completions",
             {
@@ -102,7 +111,6 @@ export async function POST(req: Request) {
         const assistantMessage =
             result?.choices?.[0]?.message?.content || "No response"
 
-        // 4. сохраняем ответ
         await supabaseServer.from("messages").insert({
             chat_id: chatId,
             role: "assistant",

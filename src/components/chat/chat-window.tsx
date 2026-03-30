@@ -32,11 +32,6 @@ export default function ChatWindow({ chatId, initialMessages = [] }: { chatId: s
         setFreeLeft(3 - count);
     }, []);
 
-    const incrementFreeQuestions = () => {
-        const count = getFreeQuestions() + 1;
-        localStorage.setItem("free_questions", count.toString());
-    }
-
     const handleFileUpload = (e: any) => {
         const selectedFile = e.target.files[0];
         if (!selectedFile) return;
@@ -125,7 +120,6 @@ export default function ChatWindow({ chatId, initialMessages = [] }: { chatId: s
 
     return (
         <div className="flex flex-col h-screen p-6 max-w-3xl mx-auto">
-            {/* Сообщения */}
             <div className="flex-1 overflow-y-auto space-y-4 mb-4">
                 {messages.map((m, i) => (
                     <div key={i} className={m.role === "user" ? "text-right" : "text-left text-gray-700"}>
@@ -137,14 +131,12 @@ export default function ChatWindow({ chatId, initialMessages = [] }: { chatId: s
                 ))}
             </div>
 
-            {/* Лимит сообщений */}
             {!user && freeLeft !== null && (
                 <p className="text-sm text-gray-500 mb-2">
                     Free questions left: {freeLeft}
                 </p>
             )}
 
-            {/* Превью картинки */}
             {typeof window !== "undefined" && preview && (
                 <div className="mb-2 flex items-center gap-2">
                     <img src={preview} className="w-16 h-16 object-cover rounded" />
@@ -152,7 +144,6 @@ export default function ChatWindow({ chatId, initialMessages = [] }: { chatId: s
                 </div>
             )}
 
-            {/* Инпут + кнопка выбора файла */}
             <div className="flex items-center gap-2 border rounded-lg px-2">
                 <label className="cursor-pointer text-xl px-2">
                     +
