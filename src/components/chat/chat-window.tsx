@@ -9,7 +9,7 @@ export default function ChatWindow({ chatId, initialMessages = [] }: { chatId: s
     const [loading, setLoading] = useState(false);
     const [preview, setPreview] = useState<string | null>(null);
     const [file, setFile] = useState<File | null>(null);
-    const [freeLeft, setFreeLeft] = useState(3);
+    const [freeLeft, setFreeLeft] = useState<number | null>(null)
 
     const user = useUser();
 
@@ -17,6 +17,11 @@ export default function ChatWindow({ chatId, initialMessages = [] }: { chatId: s
         if (typeof window === "undefined") return 0;
         return Number(localStorage.getItem("free_questions") || "0");
     }
+
+    useEffect(() => {
+        const count = getFreeQuestions()
+        setFreeLeft(3 - count)
+    }, [])
 
     useEffect(() => {
         setMessages(initialMessages);
@@ -41,25 +46,36 @@ export default function ChatWindow({ chatId, initialMessages = [] }: { chatId: s
     }
 
     const sendMessage = async () => {
-        if ((!input && !file) || loading) return;
+        if ((!input && !file) || loading) return
 
-        setLoading(true);
-        let imageUrl: string | null = null;
+        const messageText = input
+
+        setLoading(true)
+
+        let imageUrl: string | null = null
 
         if (file) {
-            const formData = new FormData();
-            formData.append("file", file);
-            formData.append("chatId", chatId);
-            const res = await fetch("/api/upload", { method: "POST", body: formData });
-            const data = await res.json();
-            imageUrl = data.url;
+            const formData = new FormData()
+            formData.append("file", file)
+            formData.append("chatId", chatId)
+
+            const res = await fetch("/api/upload", {
+                method: "POST",
+                body: formData
+            })
+
+            const data = await res.json()
+            imageUrl = data.url
         }
 
-        // Добавляем сообщение в UI
-        setMessages(prev => [...prev, { role: "user", content: input, image: imageUrl }]);
-        setInput("");
-        setPreview(null);
-        setFile(null);
+        setMessages(prev => [
+            ...prev,
+            { role: "user", content: messageText, image: imageUrl }
+        ])
+
+        setInput("")
+        setPreview(null)
+        setFile(null)
 
         try {
             const res = await fetch("/api/messages", {
@@ -67,19 +83,44 @@ export default function ChatWindow({ chatId, initialMessages = [] }: { chatId: s
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     chatId,
-                    message: input,
+                    message: messageText,
                     image: imageUrl,
-                    userId: user?.id || null // ✅ передаём userId
+                    userId: user?.id || null
                 }),
-            });
+            })
 
-            const data = await res.json();
-            setMessages(prev => [...prev, { role: "assistant", content: data.message }]);
+            let data
+
+            try {
+                const text = await res.text()
+                data = text ? JSON.parse(text) : null
+            } catch {
+                data = null
+            }
+
+            if (!res.ok || !data) {
+                setMessages(prev => [
+                    ...prev,
+                    { role: "assistant", content: "⚠️ Server error. Try again." }
+                ])
+                return
+            }
+
+            setMessages(prev => [
+                ...prev,
+                { role: "assistant", content: data.message }
+            ])
+
         } catch (e) {
-            console.error(e);
+            console.error(e)
+
+            setMessages(prev => [
+                ...prev,
+                { role: "assistant", content: "⚠️ Network error." }
+            ])
         }
 
-        setLoading(false);
+        setLoading(false)
     }
 
     return (
@@ -97,7 +138,11 @@ export default function ChatWindow({ chatId, initialMessages = [] }: { chatId: s
             </div>
 
             {/* Лимит сообщений */}
-            {!user && <p className="text-sm text-gray-500 mb-2">Free questions left: {freeLeft}</p>}
+            {!user && freeLeft !== null && (
+                <p className="text-sm text-gray-500 mb-2">
+                    Free questions left: {freeLeft}
+                </p>
+            )}
 
             {/* Превью картинки */}
             {typeof window !== "undefined" && preview && (
