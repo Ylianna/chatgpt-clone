@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useUser } from "@/hooks/use-user";
+import { useRouter } from "next/navigation";
 
 export default function ChatWindow({ chatId, initialMessages = [] }: { chatId: string, initialMessages?: any[] }) {
     const [messages, setMessages] = useState<any[]>([]);
@@ -10,6 +11,7 @@ export default function ChatWindow({ chatId, initialMessages = [] }: { chatId: s
     const [preview, setPreview] = useState<string | null>(null);
     const [file, setFile] = useState<File | null>(null);
     const [freeLeft, setFreeLeft] = useState<number | null>(null)
+    const router = useRouter();
 
     const user = useUser();
 
@@ -17,6 +19,12 @@ export default function ChatWindow({ chatId, initialMessages = [] }: { chatId: s
         if (typeof window === "undefined") return 0;
         return Number(localStorage.getItem("free_questions") || "0");
     }
+
+    useEffect(() => {
+        if (typeof window !== "undefined" && window.location.hash.includes("access_token")) {
+            return;
+        }
+    }, [user, freeLeft, router]);
 
     useEffect(() => {
         const count = getFreeQuestions()
@@ -41,82 +49,63 @@ export default function ChatWindow({ chatId, initialMessages = [] }: { chatId: s
     }
 
     const sendMessage = async () => {
-        if ((!input && !file) || loading) return
+        console.log(user, "User");
+        if ((!input && !file) || loading) return;
 
-        const messageText = input
-
-        setLoading(true)
-
-        let imageUrl: string | null = null
-
-        if (file) {
-            const formData = new FormData()
-            formData.append("file", file)
-            formData.append("chatId", chatId)
-
-            const res = await fetch("/api/upload", {
-                method: "POST",
-                body: formData
-            })
-
-            const data = await res.json()
-            imageUrl = data.url
+        if (!user && freeLeft !== null && freeLeft <= 0) {
+            router.push("/login");
+            return;
         }
 
-        setMessages(prev => [
-            ...prev,
-            { role: "user", content: messageText, image: imageUrl }
-        ])
+        const messageText = input;
+        setLoading(true);
 
-        setInput("")
-        setPreview(null)
-        setFile(null)
+        setMessages(prev => [...prev, { role: "user", content: messageText }]);
+        setInput("");
 
         try {
-            const res = await fetch("/api/messages", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    chatId,
-                    message: messageText,
-                    image: imageUrl,
-                    userId: user?.id || null
-                }),
-            })
+            let aiResponse = "";
 
-            let data
+            if (!user) {
+                const res = await fetch("/api/messages", { // Используем тот же эндпоинт
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        message: messageText,
+                        chatId,
+                        userId: null
+                    }),
+                });
+                const data = await res.json();
+                aiResponse = data.message;
+                const currentCount = Number(localStorage.getItem("free_questions") || "0");
+                const newCount = currentCount + 1;
+                localStorage.setItem("free_questions", String(newCount));
+                setFreeLeft(3 - newCount);
 
-            try {
-                const text = await res.text()
-                data = text ? JSON.parse(text) : null
-            } catch {
-                data = null
+            } else {
+                const res = await fetch("/api/messages", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        chatId,
+                        message: messageText,
+                        userId: user.id
+                    }),
+                });
+                const data = await res.json();
+                aiResponse = data.message;
             }
 
-            if (!res.ok || !data) {
-                setMessages(prev => [
-                    ...prev,
-                    { role: "assistant", content: "⚠️ Server error. Try again." }
-                ])
-                return
-            }
-
-            setMessages(prev => [
-                ...prev,
-                { role: "assistant", content: data.message }
-            ])
+            setMessages(prev => [...prev, { role: "assistant", content: aiResponse }]);
 
         } catch (e) {
-            console.error(e)
-
-            setMessages(prev => [
-                ...prev,
-                { role: "assistant", content: "⚠️ Network error." }
-            ])
+            console.error(e);
+            setMessages(prev => [...prev, { role: "assistant", content: "⚠️ Ошибка связи." }]);
+        } finally {
+            setLoading(false);
         }
-
-        setLoading(false)
-    }
+    };
 
     return (
         <div className="flex flex-col h-screen p-6 max-w-3xl mx-auto">

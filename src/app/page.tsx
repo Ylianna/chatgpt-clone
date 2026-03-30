@@ -11,14 +11,21 @@ export default function Page() {
     const user = useUser()
     const [messages, setMessages] = useState<any[]>([])
 
+    // 1. При загрузке страницы для анонима создаем временный chatId, если его нет
+    useEffect(() => {
+        if (!user && !chatId) {
+            setChatId(uuidv4())
+        }
+    }, [user, chatId])
+
     useEffect(() => {
         if (!chatId) return
 
         const fetchMessages = async () => {
             try {
                 const res = await fetch(`/api/messages?chatId=${chatId}`)
+                if (!res.ok) return // Игнорируем ошибки для новых анонимных чатов
                 const data = await res.json()
-                console.log("Messages for chat:", chatId, data)
                 setMessages(data)
             } catch (err) {
                 console.error(err)
@@ -28,7 +35,6 @@ export default function Page() {
         fetchMessages()
     }, [chatId])
 
-    // Загружаем чаты только после того как user доступен
     useEffect(() => {
         if (!user) return
 
@@ -36,9 +42,8 @@ export default function Page() {
             try {
                 const res = await fetch(`/api/chats?userId=${user.id}`)
                 const data = await res.json()
-                console.log("Чаты, полученные с бэка:", data)
                 setChats(data)
-                if (data.length && !chatId) setChatId(data[0].id) // первый чат выбран по умолчанию
+                if (data.length && !chatId) setChatId(data[0].id)
             } catch (err) {
                 console.error(err)
             }
@@ -48,53 +53,57 @@ export default function Page() {
     }, [user])
 
     const createNewChat = async () => {
-        if (user) {
-            const res = await fetch("/api/chats", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ userId: user.id })
-            })
-            const data = await res.json()
-            setChats(prev => [data, ...prev])
-            setChatId(data.id)
-        } else {
-            const newId = uuidv4()
-            setChatId(newId)
-        }
+        if (!user) return // Анонимы не создают новые чаты вручную
+
+        const res = await fetch("/api/chats", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ userId: user.id })
+        })
+        const data = await res.json()
+        setChats(prev => [data, ...prev])
+        setChatId(data.id)
     }
 
-    // Ждем загрузки user, чтобы избежать SSR/CSR расхождения
-    if (!user) return <div className="p-4">Loading user...</div>
+    // 2. УДАЛЯЕМ жесткий return !user. Вместо него проверяем только состояние загрузки (если оно есть в вашем хуке)
+    // Если ваш useUser возвращает undefined пока грузится, используйте:
+    // if (user === undefined) return <div>Loading...</div>
 
     return (
         <div className="flex h-screen">
-            {/* Левая панель */}
-            <div className="w-64 border-r p-4 flex flex-col">
-                <button
-                    onClick={createNewChat}
-                    className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 mb-4"
-                >
-                    New chat
-                </button>
+            {/* Левая панель - показываем только если есть юзер */}
+            {user && (
+                <div className="w-64 border-r p-4 flex flex-col">
+                    <button
+                        onClick={createNewChat}
+                        className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 mb-4"
+                    >
+                        New chat
+                    </button>
 
-                <div className="flex-1 overflow-y-auto space-y-2">
-                    {chats.map(chat => (
-                        <div
-                            key={chat.id}
-                            onClick={() => setChatId(chat.id)}
-                            className={`p-2 rounded cursor-pointer ${
-                                chat.id === chatId ? "bg-blue-200" : "hover:bg-gray-200"
-                            }`}
-                        >
-                            {chat.title || "Untitled chat"}
-                        </div>
-                    ))}
+                    <div className="flex-1 overflow-y-auto space-y-2">
+                        {chats.map(chat => (
+                            <div
+                                key={chat.id}
+                                onClick={() => setChatId(chat.id)}
+                                className={`p-2 rounded cursor-pointer ${
+                                    chat.id === chatId ? "bg-blue-200" : "hover:bg-gray-200"
+                                }`}
+                            >
+                                {chat.title || "Untitled chat"}
+                            </div>
+                        ))}
+                    </div>
                 </div>
-            </div>
+            )}
 
             {/* Основная область чата */}
             <div className="flex-1">
-                {chatId && <ChatWindow key={chatId} chatId={chatId} initialMessages={messages} />}
+                {chatId ? (
+                    <ChatWindow key={chatId} chatId={chatId} initialMessages={messages} />
+                ) : (
+                    <div className="flex items-center justify-center h-full">Preparing chat...</div>
+                )}
             </div>
         </div>
     )

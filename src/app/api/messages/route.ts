@@ -39,47 +39,76 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
     try {
         const body = await req.json()
-        const { chatId, message } = body
+        const { chatId, message, userId } = body
 
-        if (!chatId || !message) {
-            return NextResponse.json(
-                { error: "chatId and message required" },
-                { status: 400 }
-            )
+        if (!message) {
+            return NextResponse.json({ error: "Message required" }, { status: 400 })
         }
 
-        await supabaseServer.from("messages").insert({
-            chat_id: chatId,
-            role: "user",
-            content: message,
-        })
-        const { count } = await supabaseServer
-            .from("messages")
-            .select("*", { count: "exact", head: true })
-            .eq("chat_id", chatId)
+        let conversation = []
 
-        if (count === 1) {
-            const newTitle =
-                message.length > 40
-                    ? message.slice(0, 40) + "..."
-                    : message
+        if (userId) {
+            const { data: existingUser } = await supabaseServer
+                .from("users")
+                .select("id")
+                .eq("id", userId)
+                .single();
 
-            await supabaseServer
+            if (!existingUser) {
+                const { error: createUserError } = await supabaseServer
+                    .from("users")
+                    .insert({ id: userId, email: 'test@test.com' });
+
+                if (createUserError) throw createUserError;
+            }
+            const { data: chatData } = await supabaseServer
                 .from("chats")
-                .update({ title: newTitle })
+                .select("id")
                 .eq("id", chatId)
-        }
-        const { data: messages } = await supabaseServer
-            .from("messages")
-            .select("role, content")
-            .eq("chat_id", chatId)
-            .order("created_at", { ascending: true })
+                .single()
 
-        const conversation =
-            messages?.map((m: any) => ({
+            if (!chatData) {
+                const { data: newChat, error: insertError } = await supabaseServer
+                    .from("chats")
+                    .insert({ id: chatId, user_id: userId })
+                    .select()
+                    .single()
+                if (insertError) throw insertError
+            }
+
+            const { error: userMsgError } = await supabaseServer
+                .from("messages")
+                .insert({ chat_id: chatId, role: "user", content: message })
+
+            if (userMsgError) {
+                console.error("ОШИБКА БАЗЫ (User Message):", userMsgError)
+                throw new Error(`DB Error: ${userMsgError.message}`)
+            }
+
+            const { count } = await supabaseServer
+                .from("messages")
+                .select("*", { count: "exact", head: true })
+                .eq("chat_id", chatId)
+
+            if (count === 1) {
+                const newTitle = message.length > 40 ? message.slice(0, 40) + "..." : message
+                await supabaseServer.from("chats").update({ title: newTitle }).eq("id", chatId)
+            }
+
+            const { data: dbMessages } = await supabaseServer
+                .from("messages")
+                .select("role, content")
+                .eq("chat_id", chatId)
+                .order("created_at", { ascending: true })
+
+            conversation = dbMessages?.map((m: any) => ({
                 role: m.role,
                 content: m.content,
             })) || []
+
+        } else {
+            conversation = [{ role: "user", content: message }]
+        }
 
         const response = await fetch(
             "https://openrouter.ai/api/v1/chat/completions",
@@ -97,34 +126,27 @@ export async function POST(req: Request) {
         )
 
         if (!response.ok) {
-            const text = await response.text()
-            console.error(text)
-
-            return NextResponse.json(
-                { error: "LLM failed" },
-                { status: 500 }
-            )
+            const errorText = await response.text()
+            console.error("OpenRouter Error:", errorText)
+            return NextResponse.json({ error: "LLM failed" }, { status: 500 })
         }
 
         const result = await response.json()
+        const assistantMessage = result?.choices?.[0]?.message?.content || "No response"
 
-        const assistantMessage =
-            result?.choices?.[0]?.message?.content || "No response"
-
-        await supabaseServer.from("messages").insert({
-            chat_id: chatId,
-            role: "assistant",
-            content: assistantMessage,
-        })
+        if (userId) {
+            const { error: aiMsgError } = await supabaseServer.from("messages").insert({
+                chat_id: chatId,
+                role: "assistant",
+                content: assistantMessage
+            })
+            if (aiMsgError) console.error("ОШИБКА БАЗЫ (AI Message):", aiMsgError)
+        }
 
         return NextResponse.json({ message: assistantMessage })
 
     } catch (e: any) {
-        console.error("API ERROR:", e)
-
-        return NextResponse.json(
-            { error: "Internal error" },
-            { status: 500 }
-        )
+        console.error("API ERROR:", e.message)
+        return NextResponse.json({ error: e.message || "Internal error" }, { status: 500 })
     }
 }
