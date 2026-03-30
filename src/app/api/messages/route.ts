@@ -57,7 +57,7 @@ export async function POST(req: Request) {
             if (!existingUser) {
                 const { error: createUserError } = await supabaseServer
                     .from("users")
-                    .insert({ id: userId, email: 'test@test.com' });
+                    .insert({ id: userId, email: `${userId}@temp.com` });
 
                 if (createUserError) throw createUserError;
             }
@@ -119,7 +119,7 @@ export async function POST(req: Request) {
                     "Content-Type": "application/json",
                 },
                 body: JSON.stringify({
-                    model: "openai/gpt-3.5-turbo",
+                    model: "openrouter/free",
                     messages: conversation,
                 }),
             }
